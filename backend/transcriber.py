@@ -18,6 +18,11 @@ AUDIO_FORMATS = {".mp3", ".wav", ".ogg", ".opus", ".m4a", ".flac", ".webm"}
 VIDEO_FORMATS = {".mp4", ".mkv", ".avi", ".mov", ".webm"}
 ALL_FORMATS   = AUDIO_FORMATS | VIDEO_FORMATS
 
+# Groq acepta estos formatos directamente (sin conversion ffmpeg)
+GROQ_NATIVE   = {".flac", ".mp3", ".mp4", ".m4a", ".ogg", ".opus", ".wav", ".webm"}
+# Solo estos requieren ffmpeg para extraer el audio
+FFMPEG_NEEDED = {".mkv", ".avi", ".mov"}
+
 # ─── Configuracion desde entorno ────────────────────────────────────────────
 GROQ_API_KEY   = os.getenv("GROQ_API_KEY", "")
 GROQ_API_KEY_2 = os.getenv("GROQ_API_KEY_2", "")
@@ -157,16 +162,18 @@ def transcribe(file_path: Path, language: Optional[str] = None) -> dict:
 
     lang = language or LANGUAGE or None
 
+    suffix = file_path.suffix.lower()
+
     with tempfile.TemporaryDirectory() as tmp_dir:
-        wav_path = Path(tmp_dir) / "audio_converted.wav"
-
-        if file_path.suffix.lower() == ".wav":
-            import shutil
-            shutil.copy2(file_path, wav_path)
+        if suffix in FFMPEG_NEEDED:
+            # Solo MKV/AVI/MOV necesitan conversion a WAV
+            audio_path = Path(tmp_dir) / "audio_converted.wav"
+            extract_audio(file_path, audio_path)
         else:
-            extract_audio(file_path, wav_path)
+            # OGG, MP3, MP4, M4A, WAV, FLAC, WEBM → Groq los acepta directamente
+            audio_path = file_path
 
-        duration = _get_duration(wav_path)
+        duration = _get_duration(audio_path)
 
         text   = ""
         engine = ""
@@ -175,7 +182,7 @@ def transcribe(file_path: Path, language: Optional[str] = None) -> dict:
         # Intento con key primaria (turbo: rapido)
         if GROQ_API_KEY:
             try:
-                text   = transcribe_with_groq(wav_path, GROQ_API_KEY, GROQ_MODEL, lang)
+                text   = transcribe_with_groq(audio_path, GROQ_API_KEY, GROQ_MODEL, lang)
                 engine = "groq_key1"
             except Exception as e:
                 error1 = e
@@ -184,10 +191,10 @@ def transcribe(file_path: Path, language: Optional[str] = None) -> dict:
         # Fallback a key secundaria (large-v3: preciso)
         if not text and GROQ_API_KEY_2:
             try:
-                text   = transcribe_with_groq(wav_path, GROQ_API_KEY_2, GROQ_MODEL_2, lang)
+                text   = transcribe_with_groq(audio_path, GROQ_API_KEY_2, GROQ_MODEL_2, lang)
                 engine = "groq_key2"
             except Exception as e2:
-                msg = f"Ambas keys de Groq fallaron."
+                msg = "Ambas keys de Groq fallaron."
                 if error1:
                     msg += f" Key1: {error1} | Key2: {e2}"
                 else:
