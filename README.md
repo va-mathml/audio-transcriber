@@ -5,7 +5,7 @@ file and get the transcript back in seconds.
 
 **Live services**
 - Web: https://audio-transcriber.onrender.com
-- Bot: search `@your_bot_username` on Telegram
+- Bot: [@vatranscriber_bot](https://t.me/vatranscriber_bot) on Telegram
 
 ---
 
@@ -21,28 +21,31 @@ required, no file size gymnastics beyond 50 MB.
 ## Architecture
 
 ```
-Telegram user
-    sends audio/video
-         |
-         v
-  Telegram API
-  (webhook POST)
-         |
-         v
-  Railway - FastAPI backend          Render - Static frontend
-  backend/main.py                    frontend/index.html
-  backend/bot.py                     drag & drop interface
-  backend/transcriber.py             calls /transcribe via fetch()
-         |
-         v
-  Transcription engine (dual)
-  - Groq Whisper API  (default, cloud, fast)
-  - OpenAI Whisper    (fallback, local/self-hosted)
-         |
-         v
-  ffmpeg audio pipeline
-  any format -> WAV 16kHz mono
-  (optimal input for both engines)
+Telegram user                    Web user (laptop)
+sends audio/video                drags & drops file
+      |                                |
+      v                                v
+Telegram API              Render - Static frontend
+(webhook POST)            frontend/index.html
+      |                   drag & drop interface
+      |                   calls /transcribe via fetch()
+      v                                |
+      +────────────────────────────────+
+                     |
+                     v
+         Railway - FastAPI backend
+         backend/main.py
+         backend/bot.py
+         backend/transcriber.py
+                     |
+                     v
+      Dual Groq Whisper (100% cloud, no local model)
+      - GROQ_API_KEY  → whisper-large-v3-turbo  (fast, primary)
+      - GROQ_API_KEY_2 → whisper-large-v3       (precise, fallback)
+                     |
+                     v
+      Native formats (no ffmpeg): OGG, MP3, MP4, M4A, WAV, FLAC, WEBM
+      ffmpeg only for: MKV, AVI, MOV
 ```
 
 **Two independent services, one codebase:**
@@ -67,8 +70,8 @@ Telegram user
 | Layer | Technology |
 |-------|-----------|
 | API | FastAPI + Uvicorn |
-| Transcription | Groq Whisper API / OpenAI Whisper local |
-| Audio pipeline | ffmpeg (format conversion, extraction) |
+| Transcription | Groq Whisper API (dual key, cloud-only) |
+| Audio pipeline | ffmpeg (only for MKV/AVI/MOV) |
 | Bot | Telegram Bot API - webhook mode |
 | Frontend | Vanilla HTML/CSS/JS - drag and drop |
 | Backend deploy | Railway |
@@ -80,8 +83,8 @@ Telegram user
 ## Skills demonstrated
 
 - REST API design with FastAPI (file upload, async endpoints, CORS)
-- Dual-engine architecture with automatic fallback (Groq -> Whisper)
-- Audio/video processing pipeline with ffmpeg
+- Dual-key Groq architecture with automatic fallback (turbo → large-v3)
+- Direct audio streaming to Groq API (no intermediate conversion for most formats)
 - Telegram Bot API integration - webhook mode (Mode 2, always-on)
 - Dual-cloud deployment strategy (Railway + Render, same codebase)
 - Security basics: input validation, file sanitization, path traversal prevention
@@ -96,7 +99,7 @@ Telegram user
 audio-transcriber/
 ├── backend/
 │   ├── main.py            # FastAPI app - /transcribe + /webhook + /health
-│   ├── transcriber.py     # Dual engine: Groq API / Whisper local + ffmpeg
+│   ├── transcriber.py     # Dual Groq keys: turbo (primary) + large-v3 (fallback)
 │   ├── bot.py             # Telegram handler - audio, video, voice notes
 │   ├── utils.py           # Validation, formatting, cleanup helpers
 │   ├── requirements.txt
@@ -175,15 +178,15 @@ python scripts/set_webhook.py --status
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `GROQ_API_KEY` | Yes (if using Groq) | API key from console.groq.com |
+| `GROQ_API_KEY` | Yes | Primary key from console.groq.com |
+| `GROQ_API_KEY_2` | Recommended | Secondary key (fallback if primary hits quota) |
 | `TELEGRAM_BOT_TOKEN` | Yes | Token from @BotFather |
 | `WEBHOOK_URL` | Yes | Railway app URL (no trailing slash) |
-| `USE_WHISPER_LOCAL` | No | `true` to force local Whisper |
-| `GROQ_MODEL` | No | Default: `whisper-large-v3` |
-| `WHISPER_MODEL` | No | Default: `base` |
-| `TRANSCRIPTION_LANGUAGE` | No | Default: `es` (auto-detect if empty) |
+| `GROQ_MODEL` | No | Default: `whisper-large-v3-turbo` (primary) |
+| `GROQ_MODEL_2` | No | Default: `whisper-large-v3` (fallback) |
+| `TRANSCRIPTION_LANGUAGE` | No | Default: `es` (leave empty for auto-detect) |
 | `MAX_FILE_SIZE_MB` | No | Default: `50` |
-| `FRONTEND_URL` | No | Render URL for CORS config |
+| `ALLOWED_ORIGINS` | No | CORS origins, comma-separated |
 
 ---
 
