@@ -1,0 +1,51 @@
+# Entorno y secretos - NUNCA subir al repo
+.env
+*.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Entorno virtual
+venv/
+env/
+.venv/
+ENV/
+
+# Whisper - modelos descargados localmente (pesados)
+~/.cache/whisper/
+*.pt
+
+# Archivos temporales de audio/video
+*.tmp
+tmp/
+temp/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Railway / Render
+.railway/

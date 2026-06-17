@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transcriptor de Audio</title>
+<style>
+  /* ── Tokens ─────────────────────────────────────────────────────────── */
+  :root {
+    --bg:         #0d1117;
+    --surface:    #161b22;
+    --border:     #30363d;
+    --text:       #e6edf3;
+    --secondary:  #8b949e;
+    --accent:     #58a6ff;
+    --green:      #3fb950;
+    --red:        #f85149;
+    --amber:      #d29922;
+    --radius:     8px;
+    --mono:       'JetBrains Mono', 'Fira Code', monospace;
+    --sans:       'Inter', system-ui, sans-serif;
+  }
+
+  /* ── Reset ──────────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 16px 64px;
+  }
+
+  /* ── Layout ─────────────────────────────────────────────────────────── */
+  .container {
+    width: 100%;
+    max-width: 680px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  /* ── Header ─────────────────────────────────────────────────────────── */
+  header {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  h1 {
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: var(--secondary);
+  }
+
+  /* ── Drop zone ──────────────────────────────────────────────────────── */
+  .drop-zone {
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 48px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    position: relative;
+  }
+
+  .drop-zone:hover,
+  .drop-zone.dragover {
+    border-color: var(--accent);
+    background: #161b22ee;
+  }
+
+  .drop-zone.dragover {
+    border-style: solid;
+  }
+
+  .drop-icon {
+    width: 40px;
+    height: 40px;
+    margin: 0 auto 16px;
+    opacity: 0.5;
+  }
+
+  .drop-label {
+    font-size: 15px;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .drop-label span {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+
+  .drop-formats {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--secondary);
+    margin-top: 8px;
+  }
+
+  #file-input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* ── Archivo seleccionado ───────────────────────────────────────────── */
+  .file-info {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+
+  .file-info.visible { display: flex; }
+
+  .file-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    background: #1c2128;
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent);
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .file-meta { flex: 1; min-width: 0; }
+
+  .file-name {
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .file-size {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--secondary);
+    margin-top: 2px;
+  }
+
+  .btn-clear {
+    background: none;
+    border: none;
+    color: var(--secondary);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.15s;
+    flex-shrink: 0;
+  }
+
+  .btn-clear:hover { color: var(--red); }
+
+  /* ── Boton principal ────────────────────────────────────────────────── */
+  .btn-transcribe {
+    width: 100%;
+    padding: 13px;
+    background: var(--accent);
+    color: #0d1117;
+    font-family: var(--sans);
+    font-size: 15px;
+    font-weight: 600;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: opacity 0.15s;
+    display: none;
+  }
+
+  .btn-transcribe:hover { opacity: 0.88; }
+  .btn-transcribe.visible { display: block; }
+  .btn-transcribe:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Progreso ───────────────────────────────────────────────────────── */
+  .progress-wrap {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .progress-wrap.visible { display: flex; }
+
+  .progress-label {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--secondary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .progress-bar-bg {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.3s ease;
+    border-radius: 2px;
+  }
+
+  /* ── Resultado ──────────────────────────────────────────────────────── */
+  .result-block {
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .result-block.visible { display: flex; }
+
+  .result-meta {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .meta-chip {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--secondary);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 8px;
+  }
+
+  .meta-chip.engine { color: var(--green); border-color: #1e3a2a; background: #0d1f16; }
+
+  .result-text-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .result-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .result-toolbar-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .btn-copy {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .btn-copy:hover { background: #1c2128; }
+  .btn-copy.copied { color: var(--green); border-color: #1e3a2a; }
+
+  #result-text {
+    width: 100%;
+    min-height: 180px;
+    max-height: 420px;
+    padding: 16px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.7;
+    resize: vertical;
+    outline: none;
+  }
+
+  .btn-download {
+    align-self: flex-start;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--secondary);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .btn-download:hover { color: var(--text); border-color: var(--secondary); }
+
+  /* ── Error ──────────────────────────────────────────────────────────── */
+  .error-block {
+    display: none;
+    background: #1c0f0f;
+    border: 1px solid #3d1a1a;
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    font-size: 14px;
+    color: var(--red);
+    font-family: var(--mono);
+  }
+
+  .error-block.visible { display: block; }
+
+  /* ── Footer ─────────────────────────────────────────────────────────── */
+  footer {
+    margin-top: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--border);
+    text-align: center;
+  }
+
+  footer a { color: var(--secondary); text-decoration: none; }
+  footer a:hover { color: var(--text); }
+
+  /* ── Responsive ─────────────────────────────────────────────────────── */
+  @media (max-width: 480px) {
+    body { padding: 32px 12px 48px; }
+    h1 { font-size: 22px; }
+    .drop-zone { padding: 36px 20px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation: none; opacity: 0.5; }
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <div class="eyebrow">Speech to Text</div>
+    <h1>Transcriptor de Audio</h1>
+    <p class="subtitle">Arrastra un archivo de audio o video y obtén el texto transcrito.</p>
+  </header>
+
+  <!-- Drop zone -->
+  <div class="drop-zone" id="drop-zone">
+    <input type="file" id="file-input" accept=".mp3,.wav,.ogg,.opus,.m4a,.flac,.mp4,.mkv,.avi,.mov,.webm">
+    <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <p class="drop-label">Arrastra tu archivo aqui o <span>selecciona uno</span></p>
+    <p class="drop-formats">MP3 - WAV - OGG - OPUS - M4A - MP4 - MKV - WebM - hasta 50 MB</p>
+  </div>
+
+  <!-- Archivo seleccionado -->
+  <div class="file-info" id="file-info">
+    <div class="file-icon" id="file-ext">---</div>
+    <div class="file-meta">
+      <div class="file-name" id="file-name">-</div>
+      <div class="file-size" id="file-size">-</div>
+    </div>
+    <button class="btn-clear" id="btn-clear" title="Quitar archivo">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Boton principal -->
+  <button class="btn-transcribe" id="btn-transcribe">Transcribir</button>
+
+  <!-- Progreso -->
+  <div class="progress-wrap" id="progress-wrap">
+    <div class="progress-label">
+      <div class="spinner"></div>
+      <span id="progress-label-text">Subiendo archivo...</span>
+    </div>
+    <div class="progress-bar-bg">
+      <div class="progress-bar-fill" id="progress-bar"></div>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div class="error-block" id="error-block"></div>
+
+  <!-- Resultado -->
+  <div class="result-block" id="result-block">
+    <div class="result-meta" id="result-meta"></div>
+    <div class="result-text-wrap">
+      <div class="result-toolbar">
+        <span class="result-toolbar-label">Transcripcion</span>
+        <button class="btn-copy" id="btn-copy">Copiar</button>
+      </div>
+      <textarea id="result-text" readonly></textarea>
+    </div>
+    <a class="btn-download" id="btn-download" download="transcripcion.txt">Descargar .txt</a>
+  </div>
+
+  <footer>
+    Ejecutor: <a href="https://github.com/va-mathml" target="_blank">Victor Aguilar</a>
+    &nbsp;|&nbsp;
+    Motor: Groq Whisper / Whisper local
+  </footer>
+
+</div>
+
+<script>
+// ── Config ───────────────────────────────────────────────────────────────
+const BACKEND_URL = (
+  window.BACKEND_URL ||
+  document.currentScript?.dataset?.backend ||
+  "https://your-app.railway.app"   // reemplazar en deploy
+);
+
+const MAX_MB = 50;
+
+// ── Estado ───────────────────────────────────────────────────────────────
+let selectedFile = null;
+
+// ── Referencias DOM ──────────────────────────────────────────────────────
+const dropZone      = document.getElementById("drop-zone");
+const fileInput     = document.getElementById("file-input");
+const fileInfo      = document.getElementById("file-info");
+const fileExtEl     = document.getElementById("file-ext");
+const fileNameEl    = document.getElementById("file-name");
+const fileSizeEl    = document.getElementById("file-size");
+const btnClear      = document.getElementById("btn-clear");
+const btnTranscribe = document.getElementById("btn-transcribe");
+const progressWrap  = document.getElementById("progress-wrap");
+const progressLabel = document.getElementById("progress-label-text");
+const progressBar   = document.getElementById("progress-bar");
+const errorBlock    = document.getElementById("error-block");
+const resultBlock   = document.getElementById("result-block");
+const resultMeta    = document.getElementById("result-meta");
+const resultText    = document.getElementById("result-text");
+const btnCopy       = document.getElementById("btn-copy");
+const btnDownload   = document.getElementById("btn-download");
+
+// ── Drag & Drop ──────────────────────────────────────────────────────────
+dropZone.addEventListener("dragover", e => {
+  e.preventDefault();
+  dropZone.classList.add("dragover");
+});
+
+["dragleave", "dragend"].forEach(ev =>
+  dropZone.addEventListener(ev, () => dropZone.classList.remove("dragover"))
+);
+
+dropZone.addEventListener("drop", e => {
+  e.preventDefault();
+  dropZone.classList.remove("dragover");
+  const file = e.dataTransfer.files[0];
+  if (file) setFile(file);
+});
+
+fileInput.addEventListener("change", () => {
+  if (fileInput.files[0]) setFile(fileInput.files[0]);
+});
+
+// ── Seleccion de archivo ─────────────────────────────────────────────────
+function setFile(file) {
+  clearError();
+  clearResult();
+
+  const ext    = file.name.split(".").pop().toLowerCase();
+  const sizeMb = file.size / (1024 * 1024);
+
+  if (sizeMb > MAX_MB) {
+    showError(`Archivo demasiado grande: ${sizeMb.toFixed(1)} MB (maximo ${MAX_MB} MB)`);
+    return;
+  }
+
+  selectedFile = file;
+
+  fileExtEl.textContent  = ext;
+  fileNameEl.textContent = file.name;
+  fileSizeEl.textContent = formatSize(file.size);
+
+  fileInfo.classList.add("visible");
+  btnTranscribe.classList.add("visible");
+}
+
+btnClear.addEventListener("click", () => {
+  selectedFile = null;
+  fileInput.value = "";
+  fileInfo.classList.remove("visible");
+  btnTranscribe.classList.remove("visible");
+  clearError();
+  clearResult();
+});
+
+// ── Transcripcion ────────────────────────────────────────────────────────
+btnTranscribe.addEventListener("click", async () => {
+  if (!selectedFile) return;
+
+  clearError();
+  clearResult();
+
+  btnTranscribe.disabled = true;
+  showProgress("Subiendo archivo...", 20);
+
+  const formData = new FormData();
+  formData.append("file", selectedFile);
+
+  try {
+    showProgress("Transcribiendo...", 60);
+
+    const response = await fetch(`${BACKEND_URL}/transcribe`, {
+      method: "POST",
+      body: formData,
+    });
+
+    showProgress("Procesando respuesta...", 90);
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || `Error ${response.status}`);
+    }
+
+    showProgress("Listo", 100);
+    setTimeout(() => {
+      hideProgress();
+      showResult(data);
+    }, 400);
+
+  } catch (err) {
+    hideProgress();
+    showError(
+      err.message.includes("Failed to fetch")
+        ? "No se pudo conectar con el servidor. Verifica tu conexion."
+        : err.message
+    );
+  } finally {
+    btnTranscribe.disabled = false;
+  }
+});
+
+// ── Resultado ────────────────────────────────────────────────────────────
+function showResult(data) {
+  // Metadatos
+  const chips = [
+    { label: data.engine, cls: "engine" },
+    { label: `${formatDuration(data.duration_sec)}` },
+    { label: `${data.char_count} caracteres` },
+    { label: data.language || "auto" },
+  ];
+
+  resultMeta.innerHTML = chips.map(c =>
+    `<span class="meta-chip ${c.cls || ""}">${c.label}</span>`
+  ).join("");
+
+  // Texto
+  resultText.value = data.text;
+
+  // Boton descargar
+  const blob = new Blob([data.text], { type: "text/plain;charset=utf-8" });
+  btnDownload.href = URL.createObjectURL(blob);
+  btnDownload.download = `transcripcion_${Date.now()}.txt`;
+
+  resultBlock.classList.add("visible");
+}
+
+function clearResult() {
+  resultBlock.classList.remove("visible");
+  resultText.value = "";
+  resultMeta.innerHTML = "";
+}
+
+// ── Copiar ───────────────────────────────────────────────────────────────
+btnCopy.addEventListener("click", async () => {
+  if (!resultText.value) return;
+  try {
+    await navigator.clipboard.writeText(resultText.value);
+    btnCopy.textContent = "Copiado";
+    btnCopy.classList.add("copied");
+    setTimeout(() => {
+      btnCopy.textContent = "Copiar";
+      btnCopy.classList.remove("copied");
+    }, 2000);
+  } catch {
+    resultText.select();
+    document.execCommand("copy");
+  }
+});
+
+// ── Progreso ─────────────────────────────────────────────────────────────
+function showProgress(label, pct) {
+  progressLabel.textContent = label;
+  progressBar.style.width   = `${pct}%`;
+  progressWrap.classList.add("visible");
+}
+
+function hideProgress() {
+  progressWrap.classList.remove("visible");
+  progressBar.style.width = "0%";
+}
+
+// ── Error ────────────────────────────────────────────────────────────────
+function showError(msg) {
+  errorBlock.textContent = `Error: ${msg}`;
+  errorBlock.classList.add("visible");
+}
+
+function clearError() {
+  errorBlock.textContent = "";
+  errorBlock.classList.remove("visible");
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+function formatSize(bytes) {
+  if (bytes < 1024)       return `${bytes} B`;
+  if (bytes < 1048576)    return `${(bytes/1024).toFixed(1)} KB`;
+  return `${(bytes/1048576).toFixed(1)} MB`;
+}
+
+function formatDuration(sec) {
+  sec = Math.round(sec || 0);
+  if (sec < 60)  return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}m ${s}s`;
+}
+</script>
+</body>
+</html>
