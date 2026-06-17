@@ -272,9 +272,8 @@ async def send_message(chat_id: int, text: str) -> None:
         response = await client.post(
             f"{TELEGRAM_API}/sendMessage",
             json={
-                "chat_id":    chat_id,
-                "text":       text,
-                "parse_mode": None,  # texto plano, sin Markdown
+                "chat_id": chat_id,
+                "text":    text,
             }
         )
         if response.status_code != 200:
