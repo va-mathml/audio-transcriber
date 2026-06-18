@@ -150,34 +150,28 @@ async def _send_transcription(chat_id: int, result: dict, file_name: str) -> Non
     Formatea y envía la transcripción al usuario.
     Si el texto es muy largo, lo divide en partes.
     """
-    text      = result["text"]
-    engine    = result["engine"]
-    duration  = result["duration_sec"]
-    chars     = result["char_count"]
+    text = result["text"]
 
     if not text:
         await send_message(chat_id, "No se detectó texto en el audio.")
         return
 
-    # Encabezado con firma
+    # Encabezado como mensaje plano
     header = (
-        f"🎙️ Transcripción lista\n"
-        f"Desarrollado por Victor Aguilar · linkedin.com/in/vaguilar-ai\n"
-        f"{'─' * 30}\n\n"
+        "🎙️ Transcripción lista\n"
+        "Desarrollado por Victor Aguilar · linkedin.com/in/vaguilar-ai"
     )
+    await send_message(chat_id, header)
 
-    full_message = header + text
+    # Texto en bloque de código (muestra botón copiar en Telegram)
+    safe_text = text.replace("`", "'")
 
-    # Telegram tiene limite de 4096 caracteres por mensaje
-    if len(full_message) <= 4096:
-        await send_message(chat_id, full_message)
+    if len(safe_text) <= 4000:
+        await send_message(chat_id, f"```\n{safe_text}\n```", parse_mode="Markdown")
     else:
-        # Enviar encabezado primero
-        await send_message(chat_id, header + "(texto largo - dividido en partes)")
-        # Dividir texto en chunks de 4000 caracteres
-        chunks = [text[i:i+4000] for i in range(0, len(text), 4000)]
+        chunks = [safe_text[i:i+3900] for i in range(0, len(safe_text), 3900)]
         for i, chunk in enumerate(chunks, 1):
-            await send_message(chat_id, f"Parte {i}/{len(chunks)}:\n\n{chunk}")
+            await send_message(chat_id, f"```\nParte {i}/{len(chunks)}:\n\n{chunk}\n```", parse_mode="Markdown")
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -266,15 +260,12 @@ async def _get_file_url(file_id: str) -> str:
     return f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
 
 
-async def send_message(chat_id: int, text: str) -> None:
+async def send_message(chat_id: int, text: str, parse_mode: str = None) -> None:
     """Envia un mensaje de texto a un chat de Telegram."""
+    payload = {"chat_id": chat_id, "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
     async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(
-            f"{TELEGRAM_API}/sendMessage",
-            json={
-                "chat_id": chat_id,
-                "text":    text,
-            }
-        )
+        response = await client.post(f"{TELEGRAM_API}/sendMessage", json=payload)
         if response.status_code != 200:
             logger.error(f"Error enviando mensaje: {response.text}")
