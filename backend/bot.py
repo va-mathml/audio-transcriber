@@ -159,10 +159,10 @@ async def _send_transcription(chat_id: int, result: dict, file_name: str) -> Non
         await send_message(chat_id, "No se detectó texto en el audio.")
         return
 
-    # Encabezado con metadatos
+    # Encabezado con firma
     header = (
-        f"Transcripcion de: {file_name}\n"
-        f"Motor: {engine} | Duracion: {duration:.0f}s | {chars} caracteres\n"
+        f"🎙️ Transcripción lista\n"
+        f"Desarrollado por Victor Aguilar · linkedin.com/in/vaguilar-ai\n"
         f"{'─' * 30}\n\n"
     )
 
