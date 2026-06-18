@@ -60,13 +60,7 @@ app.add_middleware(
 
 @app.get("/", include_in_schema=False)
 async def root():
-    return JSONResponse({
-        "service": "Audio Transcriber API",
-        "version": "1.0.0",
-        "docs":    "/docs",
-        "health":  "/health",
-        "frontend": os.getenv("FRONTEND_URL", "https://audio-transcriber.onrender.com"),
-    })
+    return FileResponse("static/index.html")
 
 
 @app.get("/health")
