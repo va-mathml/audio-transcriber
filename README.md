@@ -4,7 +4,7 @@ Speech-to-text API with Telegram bot and web interface. Send any audio or video
 file and get the transcript back in seconds.
 
 **Live services**
-- Web: https://audio-transcriber.onrender.com
+- Web: https://audio-transcriber-production-656f.up.railway.app
 - Bot: [@vatranscriber_bot](https://t.me/vatranscriber_bot) on Telegram
 
 ---
@@ -25,8 +25,8 @@ Telegram user                    Web user (laptop)
 sends audio/video                drags & drops file
       |                                |
       v                                v
-Telegram API              Render - Static frontend
-(webhook POST)            frontend/index.html
+Telegram API              Railway - static/index.html
+(webhook POST)            served by FastAPI (same origin)
       |                   drag & drop interface
       |                   calls /transcribe via fetch()
       v                                |
@@ -48,9 +48,9 @@ Telegram API              Render - Static frontend
       ffmpeg only for: MKV, AVI, MOV
 ```
 
-**Two independent services, one codebase:**
-- Railway runs the bot and API (always on, webhook mode)
-- Render serves the web UI (static, zero cold-start cost)
+**One service, one deployment:**
+- Railway runs the bot, API, and web UI from a single FastAPI process
+- The frontend is a static HTML file served at `GET /` — no separate hosting needed
 
 ---
 
@@ -74,19 +74,18 @@ Telegram API              Render - Static frontend
 | Audio pipeline | ffmpeg (only for MKV/AVI/MOV) |
 | Bot | Telegram Bot API - webhook mode |
 | Frontend | Vanilla HTML/CSS/JS - drag and drop |
-| Backend deploy | Railway |
-| Frontend deploy | Render |
+| Deploy | Railway (bot + API + web UI in one service) |
 | Config | python-dotenv |
 
 ---
 
 ## Skills demonstrated
 
-- REST API design with FastAPI (file upload, async endpoints, CORS)
+- REST API design with FastAPI (file upload, async endpoints, static file serving)
 - Dual-key Groq architecture with automatic fallback (turbo → large-v3)
 - Direct audio streaming to Groq API (no intermediate conversion for most formats)
-- Telegram Bot API integration - webhook mode (Mode 2, always-on)
-- Dual-cloud deployment strategy (Railway + Render, same codebase)
+- Telegram Bot API integration - webhook mode (always-on, no polling)
+- Single-service deployment strategy (Railway serves bot, API, and UI from one process)
 - Security basics: input validation, file sanitization, path traversal prevention
 - Async Python with httpx for non-blocking file downloads
 - Environment-based configuration for dev/prod parity
@@ -98,14 +97,16 @@ Telegram API              Render - Static frontend
 ```
 audio-transcriber/
 ├── backend/
-│   ├── main.py            # FastAPI app - /transcribe + /webhook + /health
+│   ├── main.py            # FastAPI app - GET / + /transcribe + /webhook + /health
 │   ├── transcriber.py     # Dual Groq keys: turbo (primary) + large-v3 (fallback)
 │   ├── bot.py             # Telegram handler - audio, video, voice notes
 │   ├── utils.py           # Validation, formatting, cleanup helpers
+│   ├── static/
+│   │   └── index.html     # Drag & drop UI - served by FastAPI at GET /
 │   ├── requirements.txt
 │   └── Procfile           # Railway entry point
 ├── frontend/
-│   └── index.html         # Drag & drop UI - calls backend API
+│   └── index.html         # Source copy (reference only - not deployed)
 ├── scripts/
 │   └── set_webhook.py     # Register Railway URL as Telegram webhook
 ├── .env.example           # All environment variables documented
@@ -135,42 +136,32 @@ cp .env.example .env
 cd backend
 uvicorn main:app --reload --port 8000
 
-# 5. Open frontend
-# Open frontend/index.html in your browser
-# Set BACKEND_URL = "http://localhost:8000" in index.html for local testing
+# 5. Open http://localhost:8000 in your browser
+# The web UI is served directly by FastAPI at GET /
 ```
 
 ---
 
 ## Deploy
 
-### Backend - Railway
+### Railway
 
 1. Push this repo to GitHub
 2. New project on railway.app - connect repo
 3. Set root directory: `backend`
 4. Add environment variables from `.env.example`
 5. Railway auto-detects `Procfile` and deploys
-6. Copy the generated URL (e.g. `https://audio-transcriber.railway.app`)
+6. The same URL serves both the web UI and the API
 
 ### Register Telegram webhook
 
 ```bash
-# Set WEBHOOK_URL in .env, then:
+# Set WEBHOOK_URL in .env to your Railway URL, then:
 python scripts/set_webhook.py
 
 # Verify
 python scripts/set_webhook.py --status
 ```
-
-### Frontend - Render
-
-1. New static site on render.com - connect same repo
-2. Set root directory: `frontend`
-3. Build command: (leave empty)
-4. Publish directory: `frontend`
-5. Edit `BACKEND_URL` in `frontend/index.html` to point to your Railway URL
-6. Deploy
 
 ---
 
@@ -186,7 +177,6 @@ python scripts/set_webhook.py --status
 | `GROQ_MODEL_2` | No | Default: `whisper-large-v3` (fallback) |
 | `TRANSCRIPTION_LANGUAGE` | No | Default: `es` (leave empty for auto-detect) |
 | `MAX_FILE_SIZE_MB` | No | Default: `50` |
-| `ALLOWED_ORIGINS` | No | CORS origins, comma-separated |
 
 ---
 
