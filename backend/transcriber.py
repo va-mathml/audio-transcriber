@@ -221,48 +221,34 @@ def transcribe_youtube(url: str, language: Optional[str] = None) -> dict:
     Prioridad de idioma: configurado → español → inglés → cualquier disponible.
     """
     try:
-        from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
+        from youtube_transcript_api import YouTubeTranscriptApi
     except ImportError:
         raise RuntimeError("youtube-transcript-api no instalado. Ejecuta: pip install youtube-transcript-api")
 
     lang     = language or LANGUAGE or None
     video_id = _extract_video_id(url)
 
+    preferred = []
+    if lang:
+        preferred.append(lang)
+    for l in ("es", "en"):
+        if l not in preferred:
+            preferred.append(l)
+
     try:
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-
-        preferred = []
-        if lang:
-            preferred.append(lang)
-        for l in ("es", "en"):
-            if l not in preferred:
-                preferred.append(l)
-
-        transcript = None
-        for l in preferred:
-            try:
-                transcript = transcript_list.find_transcript([l])
-                break
-            except Exception:
-                pass
-
-        if transcript is None:
-            transcript = next(iter(transcript_list))
-
-        segments = transcript.fetch()
-
-    except TranscriptsDisabled:
-        raise ValueError("Este video tiene las transcripciones desactivadas")
-    except NoTranscriptFound:
-        raise ValueError("No hay transcripciones disponibles para este video")
+        api = YouTubeTranscriptApi()
+        try:
+            segments = list(api.fetch(video_id, languages=preferred))
+        except Exception:
+            segments = list(api.fetch(video_id))
     except Exception as e:
         raise ValueError(f"No se pudo obtener la transcripción: {e}")
 
     if not segments:
         raise ValueError("La transcripción está vacía")
 
-    text     = " ".join(seg["text"] for seg in segments).strip()
-    duration = segments[-1]["start"] + segments[-1].get("duration", 0.0)
+    text     = " ".join(seg.text for seg in segments).strip()
+    duration = segments[-1].start + getattr(segments[-1], "duration", 0.0)
 
     return {
         "text":         text,
