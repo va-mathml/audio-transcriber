@@ -8,7 +8,6 @@ Autor: Victor Aguilar - github.com/va-mathml
 """
 
 import os
-import asyncio
 import logging
 import tempfile
 from pathlib import Path
@@ -17,9 +16,8 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel
 
-from transcriber import transcribe, transcribe_youtube, ALL_FORMATS, MAX_FILE_MB
+from transcriber import transcribe, ALL_FORMATS, MAX_FILE_MB
 from bot import handle_update
 
 # ─── Logging ────────────────────────────────────────────────────────────────
@@ -134,41 +132,6 @@ async def transcribe_endpoint(file: UploadFile = File(...)):
         # Limpiar archivo temporal siempre
         if tmp_path.exists():
             tmp_path.unlink()
-
-
-class YoutubeRequest(BaseModel):
-    url: str
-
-
-@app.post("/transcribe-youtube")
-async def transcribe_youtube_endpoint(body: YoutubeRequest):
-    """
-    Recibe un link de YouTube y retorna la transcripcion del audio.
-    """
-    url = body.url.strip()
-    if not url:
-        raise HTTPException(status_code=400, detail="URL vacía")
-
-    logger.info(f"/transcribe-youtube: {url}")
-
-    try:
-        result = await asyncio.to_thread(transcribe_youtube, url)
-        return JSONResponse({
-            "success":      True,
-            "text":         result["text"],
-            "engine":       result["engine"],
-            "language":     result["language"],
-            "duration_sec": result["duration_sec"],
-            "char_count":   result["char_count"],
-            "source_file":  result["source_file"],
-        })
-
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    except RuntimeError as e:
-        logger.error(f"Error YouTube {url}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/webhook")

@@ -379,63 +379,6 @@
   footer a { color: var(--secondary); text-decoration: none; }
   footer a:hover { color: var(--text); }
 
-  /* ── Separador ─────────────────────────────────────────────────────── */
-  .divider {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: var(--secondary);
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.06em;
-  }
-  .divider::before,
-  .divider::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-  }
-
-  /* ── YouTube ────────────────────────────────────────────────────────── */
-  .yt-input-row {
-    display: flex;
-    gap: 8px;
-  }
-
-  .yt-input {
-    flex: 1;
-    background: var(--surface);
-    border: 1.5px solid var(--border);
-    border-radius: var(--radius);
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 13px;
-    padding: 11px 14px;
-    outline: none;
-    transition: border-color 0.15s;
-    min-width: 0;
-  }
-  .yt-input::placeholder { color: var(--secondary); }
-  .yt-input:focus { border-color: var(--accent); }
-
-  .btn-yt {
-    padding: 11px 18px;
-    background: #cc0000;
-    color: #fff;
-    font-family: var(--sans);
-    font-size: 14px;
-    font-weight: 600;
-    border: none;
-    border-radius: var(--radius);
-    cursor: pointer;
-    transition: opacity 0.15s;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-  .btn-yt:hover { opacity: 0.85; }
-  .btn-yt:disabled { opacity: 0.4; cursor: not-allowed; }
-
   /* ── Responsive ─────────────────────────────────────────────────────── */
   @media (max-width: 480px) {
     body { padding: 32px 12px 48px; }
@@ -468,15 +411,6 @@
     </svg>
     <p class="drop-label">Arrastra tu archivo aqui o <span>selecciona uno</span></p>
     <p class="drop-formats">MP3 - WAV - OGG - OPUS - M4A - MP4 - MKV - WebM - hasta 50 MB</p>
-  </div>
-
-  <!-- Separador -->
-  <div class="divider">o pega un link de YouTube</div>
-
-  <!-- YouTube -->
-  <div class="yt-input-row">
-    <input class="yt-input" id="yt-input" type="url" placeholder="https://youtube.com/watch?v=...">
-    <button class="btn-yt" id="btn-yt">Transcribir</button>
   </div>
 
   <!-- Archivo seleccionado -->
@@ -744,50 +678,6 @@ function formatDuration(sec) {
   const s = sec % 60;
   return `${m}m ${s}s`;
 }
-
-// ── YouTube ───────────────────────────────────────────────────────────────
-const ytInput = document.getElementById("yt-input");
-const btnYt   = document.getElementById("btn-yt");
-
-btnYt.addEventListener("click", async () => {
-  const url = ytInput.value.trim();
-  if (!url) return;
-
-  clearError();
-  clearResult();
-  btnYt.disabled = true;
-  showProgress("Descargando audio de YouTube...", 25);
-
-  try {
-    const response = await fetch(`${BACKEND_URL}/transcribe-youtube`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ url }),
-    });
-
-    showProgress("Transcribiendo...", 70);
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.detail || `Error ${response.status}`);
-    }
-
-    showProgress("Listo", 100);
-    setTimeout(() => { hideProgress(); showResult(data); }, 400);
-
-  } catch (err) {
-    hideProgress();
-    showError(
-      err.message.includes("Failed to fetch")
-        ? "No se pudo conectar con el servidor."
-        : err.message
-    );
-  } finally {
-    btnYt.disabled = false;
-  }
-});
-
-ytInput.addEventListener("keydown", e => { if (e.key === "Enter") btnYt.click(); });
 </script>
 </body>
 </html>
