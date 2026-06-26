@@ -221,10 +221,11 @@ def transcribe_youtube(url: str, language: Optional[str] = None) -> dict:
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
         ydl_opts = {
-            "format":      "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio",
+            "format":      "bestaudio/best",
             "outtmpl":     str(tmp_path / "%(id)s.%(ext)s"),
             "quiet":       True,
             "no_warnings": True,
+            "noplaylist":  True,
         }
 
         try:
