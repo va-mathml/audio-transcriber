@@ -32,6 +32,10 @@ GROQ_MODEL_2   = os.getenv("GROQ_MODEL_2", "whisper-large-v3")        # key2: pr
 MAX_FILE_MB    = int(os.getenv("MAX_FILE_SIZE_MB", "50"))
 LANGUAGE       = os.getenv("TRANSCRIPTION_LANGUAGE", "es")
 
+# Proxy Webshare para YouTube (Railway tiene IP de datacenter, YouTube la bloquea)
+WEBSHARE_USER  = os.getenv("WEBSHARE_PROXY_USERNAME", "")
+WEBSHARE_PASS  = os.getenv("WEBSHARE_PROXY_PASSWORD", "")
+
 
 # ════════════════════════════════════════════════════════════════════════════
 # UTILIDADES ffmpeg
@@ -235,8 +239,17 @@ def transcribe_youtube(url: str, language: Optional[str] = None) -> dict:
         if l not in preferred:
             preferred.append(l)
 
+    # Usar proxy residencial Webshare si está configurado (evita el bloqueo de IP)
+    proxy_config = None
+    if WEBSHARE_USER and WEBSHARE_PASS:
+        from youtube_transcript_api.proxies import WebshareProxyConfig
+        proxy_config = WebshareProxyConfig(
+            proxy_username=WEBSHARE_USER,
+            proxy_password=WEBSHARE_PASS,
+        )
+
     try:
-        api = YouTubeTranscriptApi()
+        api = YouTubeTranscriptApi(proxy_config=proxy_config)
         try:
             segments = list(api.fetch(video_id, languages=preferred))
         except Exception:
