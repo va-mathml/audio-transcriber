@@ -5,6 +5,7 @@ Autor: Victor Aguilar - github.com/va-mathml
 """
 
 import os
+import re
 import logging
 import tempfile
 import subprocess
@@ -205,65 +206,70 @@ def transcribe(file_path: Path, language: Optional[str] = None) -> dict:
     }
 
 
+def _extract_video_id(url: str) -> str:
+    """Extrae el ID de 11 caracteres de una URL de YouTube."""
+    match = re.search(r'(?:v=|youtu\.be/|shorts/|live/)([a-zA-Z0-9_-]{11})', url)
+    if not match:
+        raise ValueError(f"No se pudo reconocer la URL de YouTube: {url}")
+    return match.group(1)
+
+
 def transcribe_youtube(url: str, language: Optional[str] = None) -> dict:
     """
-    Descarga el audio de un video de YouTube con yt-dlp y lo transcribe con Groq.
-    Retorna el mismo dict que transcribe(), con source_file = título del video.
-    Lanza ValueError para errores del video (privado, no existe, muy largo).
+    Obtiene la transcripción de un video de YouTube usando youtube-transcript-api.
+    Usa los subtítulos existentes (automáticos o manuales) sin descargar audio.
+    Prioridad de idioma: configurado → español → inglés → cualquier disponible.
     """
     try:
-        import yt_dlp
+        from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
     except ImportError:
-        raise RuntimeError("yt-dlp no instalado. Ejecuta: pip install yt-dlp")
+        raise RuntimeError("youtube-transcript-api no instalado. Ejecuta: pip install youtube-transcript-api")
 
-    lang = language or LANGUAGE or None
+    lang     = language or LANGUAGE or None
+    video_id = _extract_video_id(url)
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_path = Path(tmp_dir)
-        ydl_opts = {
-            "format":      "bestaudio/best",
-            "outtmpl":     str(tmp_path / "%(id)s.%(ext)s"),
-            "quiet":       True,
-            "no_warnings": True,
-            "noplaylist":  True,
-        }
+    try:
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-        except yt_dlp.utils.DownloadError as e:
-            raise ValueError(f"No se pudo descargar el video: {e}")
+        preferred = []
+        if lang:
+            preferred.append(lang)
+        for l in ("es", "en"):
+            if l not in preferred:
+                preferred.append(l)
 
-        title    = info.get("title", "video_youtube")
-        duration = float(info.get("duration", 0))
+        transcript = None
+        for l in preferred:
+            try:
+                transcript = transcript_list.find_transcript([l])
+                break
+            except Exception:
+                pass
 
-        files = list(tmp_path.iterdir())
-        if not files:
-            raise RuntimeError("yt-dlp no generó ningún archivo de audio")
+        if transcript is None:
+            transcript = next(iter(transcript_list))
 
-        audio_path = files[0]
-        size_mb    = audio_path.stat().st_size / (1024 * 1024)
+        segments = transcript.fetch()
 
-        if size_mb > 24:
-            raise ValueError(
-                f"El audio del video es demasiado largo ({size_mb:.0f} MB). "
-                "Groq acepta máximo ~25 MB (~25 minutos de audio)."
-            )
+    except TranscriptsDisabled:
+        raise ValueError("Este video tiene las transcripciones desactivadas")
+    except NoTranscriptFound:
+        raise ValueError("No hay transcripciones disponibles para este video")
+    except Exception as e:
+        raise ValueError(f"No se pudo obtener la transcripción: {e}")
 
-        suffix = audio_path.suffix.lower()
-        if suffix in FFMPEG_NEEDED or suffix not in GROQ_NATIVE:
-            converted  = tmp_path / "converted.wav"
-            extract_audio(audio_path, converted)
-            audio_path = converted
+    if not segments:
+        raise ValueError("La transcripción está vacía")
 
-        text, engine = _transcribe_audio_file(audio_path, lang)
+    text     = " ".join(seg["text"] for seg in segments).strip()
+    duration = segments[-1]["start"] + segments[-1].get("duration", 0.0)
 
     return {
         "text":         text,
-        "engine":       engine,
+        "engine":       "youtube_captions",
         "language":     lang or "auto",
         "duration_sec": duration,
-        "source_file":  title,
+        "source_file":  video_id,
         "char_count":   len(text),
     }
 
