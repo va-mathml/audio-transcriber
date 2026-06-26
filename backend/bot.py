@@ -7,13 +7,15 @@ Autor: Victor Aguilar - github.com/va-mathml
 """
 
 import os
+import re
+import asyncio
 import logging
 import tempfile
 from pathlib import Path
 
 import httpx
 
-from transcriber import transcribe, ALL_FORMATS
+from transcriber import transcribe, transcribe_youtube, ALL_FORMATS
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +25,17 @@ TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 MAX_FILE_MB  = int(os.getenv("MAX_FILE_SIZE_MB", "50"))
 
 # Mensajes del bot
+YOUTUBE_RE = re.compile(
+    r'(https?://)?(www\.)?(youtube\.com/(watch\?v=|shorts/|live/)|youtu\.be/)\S+'
+)
+
 MSG_WELCOME = (
     "Hola. Soy un transcriptor de audio y video.\n\n"
     "Envíame:\n"
     "- Una nota de voz\n"
     "- Un archivo de audio (MP3, WAV, OGG, M4A)\n"
-    "- Un archivo de video (MP4, MKV, WebM)\n\n"
+    "- Un archivo de video (MP4, MKV, WebM)\n"
+    "- Un link de YouTube\n\n"
     "Te devuelvo el texto transcrito."
 )
 
@@ -69,14 +76,19 @@ async def handle_update(update: dict) -> None:
         await send_message(chat_id, MSG_WELCOME)
         return
 
+    # Link de YouTube
+    if text and YOUTUBE_RE.match(text.strip()):
+        await _handle_youtube(chat_id, text.strip())
+        return
+
     # Detectar tipo de archivo en el mensaje
     file_info = _extract_file_info(message)
 
     if not file_info:
         await send_message(
             chat_id,
-            "No detecté ningún archivo de audio o video.\n"
-            "Usa /help para ver los formatos soportados."
+            "No detecté ningún archivo ni link de YouTube.\n"
+            "Usa /help para ver qué puedo hacer."
         )
         return
 
@@ -103,6 +115,23 @@ async def handle_update(update: dict) -> None:
     except Exception as e:
         logger.error(f"Error procesando archivo {file_name}: {e}")
         await send_message(chat_id, MSG_ERROR)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# YOUTUBE
+# ════════════════════════════════════════════════════════════════════════════
+
+async def _handle_youtube(chat_id: int, url: str) -> None:
+    """Descarga audio de YouTube y transcribe."""
+    await send_message(chat_id, "Descargando audio de YouTube... un momento.")
+    try:
+        result = await asyncio.to_thread(transcribe_youtube, url)
+        await _send_transcription(chat_id, result, result["source_file"])
+    except ValueError as e:
+        await send_message(chat_id, f"No se pudo procesar el video: {e}")
+    except Exception as e:
+        logger.error(f"Error YouTube {url}: {e}")
+        await send_message(chat_id, "No pude transcribir ese video. ¿Es público y sin restricciones de edad?")
 
 
 # ════════════════════════════════════════════════════════════════════════════

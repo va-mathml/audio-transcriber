@@ -138,71 +138,62 @@ def transcribe_with_groq(audio_path: Path, api_key: str, model: str, language: O
 # PUNTO DE ENTRADA PRINCIPAL
 # ════════════════════════════════════════════════════════════════════════════
 
-def transcribe(file_path: Path, language: Optional[str] = None) -> dict:
+def _transcribe_audio_file(audio_path: Path, lang: Optional[str]) -> tuple[str, str]:
     """
-    Interfaz principal de transcripcion.
-
-    Logica de keys:
-      1. Intenta con GROQ_API_KEY (key primaria)
-      2. Si falla (cuota, error de red, key invalida), intenta con GROQ_API_KEY_2
-      3. Si ambas fallan, lanza RuntimeError con ambos errores
-
-    Retorna dict con:
-      - text: str            texto transcrito
-      - engine: str          motor usado ('groq_key1' | 'groq_key2')
-      - language: str        idioma usado
-      - duration_sec: float  duracion del audio procesado
-      - char_count: int      longitud del texto
-      - source_file: str     nombre del archivo original
+    Transcribe con dual-key fallback. Retorna (text, engine).
+    Lanza RuntimeError si ambas keys fallan o no hay keys configuradas.
     """
     if not GROQ_API_KEY and not GROQ_API_KEY_2:
         raise RuntimeError("No hay ninguna GROQ_API_KEY configurada en las variables de entorno")
 
+    text   = ""
+    engine = ""
+    error1 = None
+
+    if GROQ_API_KEY:
+        try:
+            text   = transcribe_with_groq(audio_path, GROQ_API_KEY, GROQ_MODEL, lang)
+            engine = "groq_key1"
+        except Exception as e:
+            error1 = e
+            logger.warning(f"GROQ_API_KEY fallo ({e}), intentando con GROQ_API_KEY_2")
+
+    if not text and GROQ_API_KEY_2:
+        try:
+            text   = transcribe_with_groq(audio_path, GROQ_API_KEY_2, GROQ_MODEL_2, lang)
+            engine = "groq_key2"
+        except Exception as e2:
+            msg = "Ambas keys de Groq fallaron."
+            if error1:
+                msg += f" Key1: {error1} | Key2: {e2}"
+            else:
+                msg += f" Key2: {e2}"
+            raise RuntimeError(msg)
+
+    if not text and error1:
+        raise RuntimeError(f"GROQ_API_KEY_2 no configurada y key primaria fallo: {error1}")
+
+    return text, engine
+
+
+def transcribe(file_path: Path, language: Optional[str] = None) -> dict:
+    """
+    Transcribe un archivo de audio o video local.
+    Retorna dict con text, engine, language, duration_sec, char_count, source_file.
+    """
     validate_file(file_path)
-
-    lang = language or LANGUAGE or None
-
+    lang   = language or LANGUAGE or None
     suffix = file_path.suffix.lower()
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         if suffix in FFMPEG_NEEDED:
-            # Solo MKV/AVI/MOV necesitan conversion a WAV
             audio_path = Path(tmp_dir) / "audio_converted.wav"
             extract_audio(file_path, audio_path)
         else:
-            # OGG, MP3, MP4, M4A, WAV, FLAC, WEBM → Groq los acepta directamente
             audio_path = file_path
 
-        duration = _get_duration(audio_path)
-
-        text   = ""
-        engine = ""
-        error1 = None
-
-        # Intento con key primaria (turbo: rapido)
-        if GROQ_API_KEY:
-            try:
-                text   = transcribe_with_groq(audio_path, GROQ_API_KEY, GROQ_MODEL, lang)
-                engine = "groq_key1"
-            except Exception as e:
-                error1 = e
-                logger.warning(f"GROQ_API_KEY fallo ({e}), intentando con GROQ_API_KEY_2")
-
-        # Fallback a key secundaria (large-v3: preciso)
-        if not text and GROQ_API_KEY_2:
-            try:
-                text   = transcribe_with_groq(audio_path, GROQ_API_KEY_2, GROQ_MODEL_2, lang)
-                engine = "groq_key2"
-            except Exception as e2:
-                msg = "Ambas keys de Groq fallaron."
-                if error1:
-                    msg += f" Key1: {error1} | Key2: {e2}"
-                else:
-                    msg += f" Key2: {e2}"
-                raise RuntimeError(msg)
-
-        if not text and error1:
-            raise RuntimeError(f"GROQ_API_KEY_2 no configurada y key primaria fallo: {error1}")
+        duration      = _get_duration(audio_path)
+        text, engine  = _transcribe_audio_file(audio_path, lang)
 
     return {
         "text":         text,
@@ -210,6 +201,68 @@ def transcribe(file_path: Path, language: Optional[str] = None) -> dict:
         "language":     lang or "auto",
         "duration_sec": duration,
         "source_file":  file_path.name,
+        "char_count":   len(text),
+    }
+
+
+def transcribe_youtube(url: str, language: Optional[str] = None) -> dict:
+    """
+    Descarga el audio de un video de YouTube con yt-dlp y lo transcribe con Groq.
+    Retorna el mismo dict que transcribe(), con source_file = título del video.
+    Lanza ValueError para errores del video (privado, no existe, muy largo).
+    """
+    try:
+        import yt_dlp
+    except ImportError:
+        raise RuntimeError("yt-dlp no instalado. Ejecuta: pip install yt-dlp")
+
+    lang = language or LANGUAGE or None
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        ydl_opts = {
+            "format":      "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio",
+            "outtmpl":     str(tmp_path / "%(id)s.%(ext)s"),
+            "quiet":       True,
+            "no_warnings": True,
+        }
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+        except yt_dlp.utils.DownloadError as e:
+            raise ValueError(f"No se pudo descargar el video: {e}")
+
+        title    = info.get("title", "video_youtube")
+        duration = float(info.get("duration", 0))
+
+        files = list(tmp_path.iterdir())
+        if not files:
+            raise RuntimeError("yt-dlp no generó ningún archivo de audio")
+
+        audio_path = files[0]
+        size_mb    = audio_path.stat().st_size / (1024 * 1024)
+
+        if size_mb > 24:
+            raise ValueError(
+                f"El audio del video es demasiado largo ({size_mb:.0f} MB). "
+                "Groq acepta máximo ~25 MB (~25 minutos de audio)."
+            )
+
+        suffix = audio_path.suffix.lower()
+        if suffix in FFMPEG_NEEDED or suffix not in GROQ_NATIVE:
+            converted  = tmp_path / "converted.wav"
+            extract_audio(audio_path, converted)
+            audio_path = converted
+
+        text, engine = _transcribe_audio_file(audio_path, lang)
+
+    return {
+        "text":         text,
+        "engine":       engine,
+        "language":     lang or "auto",
+        "duration_sec": duration,
+        "source_file":  title,
         "char_count":   len(text),
     }
 
