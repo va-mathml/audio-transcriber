@@ -37,15 +37,13 @@ app = FastAPI(
 )
 
 # ─── CORS (permite llamadas desde el frontend Render) ───────────────────────
-ALLOWED_ORIGINS = os.getenv(
-    "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://localhost:8000,https://*.onrender.com"
-).split(",")
-
+# La API no usa cookies ni sesiones, asi que abrir CORS es seguro:
+# el navegador solo bloquea paginas, curl/scripts siempre pudieron llamarla.
+# Nota: allow_origins NO soporta comodines tipo "https://*.onrender.com".
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
