@@ -18,10 +18,10 @@ AUDIO_FORMATS = {".mp3", ".wav", ".ogg", ".opus", ".m4a", ".flac", ".webm"}
 VIDEO_FORMATS = {".mp4", ".mkv", ".avi", ".mov", ".webm"}
 ALL_FORMATS   = AUDIO_FORMATS | VIDEO_FORMATS
 
-# Groq acepta estos formatos directamente (sin conversion ffmpeg)
-GROQ_NATIVE   = {".flac", ".mp3", ".mp4", ".m4a", ".ogg", ".opus", ".wav", ".webm"}
-# Solo estos requieren ffmpeg para extraer el audio
-FFMPEG_NEEDED = {".mkv", ".avi", ".mov"}
+# Groq acepta estos audios directamente (sin conversion ffmpeg)
+GROQ_NATIVE   = {".flac", ".mp3", ".m4a", ".ogg", ".opus", ".wav"}
+# Todos los videos deben extraer el audio para no enviar el peso del video a Groq
+FFMPEG_NEEDED = {".mp4", ".mkv", ".avi", ".mov", ".webm"}
 
 # ─── Configuracion desde entorno ────────────────────────────────────────────
 GROQ_API_KEY   = os.getenv("GROQ_API_KEY", "")
