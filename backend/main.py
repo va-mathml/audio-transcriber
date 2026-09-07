@@ -74,7 +74,7 @@ async def health():
             "groq_key2": bool(os.getenv("GROQ_API_KEY_2", "")),
         },
         "ffmpeg":            check_ffmpeg(),   # True => comprime a Opus antes de Groq
-        "codec":             "opus-16k-mono-32k",
+        "codec":             "aac-16k-mono-32k",
         "max_file_mb":       MAX_FILE_MB,
         "supported_formats": sorted(ALL_FORMATS),
     }

@@ -13,6 +13,24 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+
+def _ffmpeg_bin() -> str:
+    """
+    Devuelve la ruta al binario de ffmpeg.
+
+    Prioriza el binario que empaqueta imageio-ffmpeg (funciona en cualquier
+    contenedor sin depender de que el build system instale ffmpeg del sistema,
+    p.ej. Railpack ignora nixpacks.toml). Si no esta, usa el 'ffmpeg' del PATH.
+    """
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return "ffmpeg"
+
+
+FFMPEG_BIN = _ffmpeg_bin()
+
 # ─── Formatos soportados ────────────────────────────────────────────────────
 AUDIO_FORMATS = {".mp3", ".wav", ".ogg", ".opus", ".m4a", ".flac", ".webm"}
 VIDEO_FORMATS = {".mp4", ".mkv", ".avi", ".mov", ".webm"}
@@ -40,8 +58,8 @@ def check_ffmpeg() -> bool:
     """Verifica que ffmpeg este disponible en PATH."""
     try:
         result = subprocess.run(
-            ["ffmpeg", "-version"],
-            capture_output=True, text=True, timeout=5
+            [FFMPEG_BIN, "-version"],
+            capture_output=True, text=True, timeout=15
         )
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -50,21 +68,24 @@ def check_ffmpeg() -> bool:
 
 def extract_audio(input_path: Path, output_path: Path) -> Path:
     """
-    Extrae/convierte cualquier audio o video a Opus mono 16kHz a 32 kbps
-    (contenedor .ogg, aceptado por Groq).
+    Extrae/convierte cualquier audio o video a AAC mono 16kHz a 32 kbps
+    (contenedor .m4a, aceptado por Groq).
 
-    Whisper trabaja internamente a 16kHz mono, asi que Opus 32k no pierde
-    calidad util para transcripcion pero pesa ~0.2 MB/min: una charla de
-    90 min queda en ~20 MB, muy por debajo del limite de 25 MB de Groq.
-    (FLAC 16k mono pesa ~1 MB/min y un audio largo volveria a superarlo.)
+    Whisper trabaja internamente a 16kHz mono, asi que AAC 32k no pierde
+    calidad util para transcripcion pero pesa ~0.23 MB/min: una charla de
+    90 min queda en ~21 MB, por debajo del limite de 25 MB de Groq.
+
+    Se usa el encoder AAC nativo de ffmpeg (compilado en TODA build, incluida
+    la que empaqueta imageio-ffmpeg), a diferencia de libopus/libmp3lame que
+    dependen de librerias externas que el binario puede no traer.
 
     Retorna output_path si exito, lanza excepcion si falla.
     """
     cmd = [
-        "ffmpeg",
+        FFMPEG_BIN,
         "-i", str(input_path),
         "-vn",                   # eliminar video
-        "-acodec", "libopus",    # Opus (comprimido, ideal para voz)
+        "-c:a", "aac",           # AAC nativo (siempre disponible)
         "-b:a", "32k",           # 32 kbps: sobra para voz a 16 kHz
         "-ar", "16000",          # 16 kHz
         "-ac", "1",              # mono
@@ -179,12 +200,12 @@ def transcribe(file_path: Path, language: Optional[str] = None) -> dict:
     suffix = file_path.suffix.lower()
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        # Comprimimos SIEMPRE a Opus 16kHz mono. Groq rechaza archivos
+        # Comprimimos SIEMPRE a AAC 16kHz mono. Groq rechaza archivos
         # > 25 MB (free tier), y muchos formatos "nativos" (m4a, mp3 de
-        # alta calidad, etc.) pasan ese limite con audios largos. Opus
-        # 32k reduce el peso a ~0.2 MB/min sin perder calidad para voz.
+        # alta calidad, etc.) pasan ese limite con audios largos. AAC
+        # 32k reduce el peso a ~0.23 MB/min sin perder calidad para voz.
         if check_ffmpeg():
-            audio_path = Path(tmp_dir) / "audio_converted.ogg"
+            audio_path = Path(tmp_dir) / "audio_converted.m4a"
             extract_audio(file_path, audio_path)
         else:
             # Sin ffmpeg no podemos comprimir: enviamos el original y
