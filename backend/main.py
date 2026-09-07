@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 
-from transcriber import transcribe, ALL_FORMATS, MAX_FILE_MB
+from transcriber import transcribe, ALL_FORMATS, MAX_FILE_MB, check_ffmpeg
 from bot import handle_update
 
 # ─── Logging ────────────────────────────────────────────────────────────────
@@ -73,6 +73,8 @@ async def health():
             "groq_key1": bool(os.getenv("GROQ_API_KEY", "")),
             "groq_key2": bool(os.getenv("GROQ_API_KEY_2", "")),
         },
+        "ffmpeg":            check_ffmpeg(),   # True => comprime a Opus antes de Groq
+        "codec":             "opus-16k-mono-32k",
         "max_file_mb":       MAX_FILE_MB,
         "supported_formats": sorted(ALL_FORMATS),
     }
