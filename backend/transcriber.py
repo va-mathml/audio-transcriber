@@ -50,15 +50,22 @@ def check_ffmpeg() -> bool:
 
 def extract_audio(input_path: Path, output_path: Path) -> Path:
     """
-    Extrae/convierte cualquier audio o video a WAV mono 16kHz.
-    Formato optimo para Whisper.
+    Extrae/convierte cualquier audio o video a Opus mono 16kHz a 32 kbps
+    (contenedor .ogg, aceptado por Groq).
+
+    Whisper trabaja internamente a 16kHz mono, asi que Opus 32k no pierde
+    calidad util para transcripcion pero pesa ~0.2 MB/min: una charla de
+    90 min queda en ~20 MB, muy por debajo del limite de 25 MB de Groq.
+    (FLAC 16k mono pesa ~1 MB/min y un audio largo volveria a superarlo.)
+
     Retorna output_path si exito, lanza excepcion si falla.
     """
     cmd = [
         "ffmpeg",
         "-i", str(input_path),
         "-vn",                   # eliminar video
-        "-acodec", "pcm_s16le",  # PCM 16-bit
+        "-acodec", "libopus",    # Opus (comprimido, ideal para voz)
+        "-b:a", "32k",           # 32 kbps: sobra para voz a 16 kHz
         "-ar", "16000",          # 16 kHz
         "-ac", "1",              # mono
         "-y",                    # sobreescribir sin preguntar
@@ -117,9 +124,16 @@ def transcribe_with_groq(audio_path: Path, api_key: str, model: str, language: O
     client = Groq(api_key=api_key)
     logger.info(f"Groq: {audio_path.name} | modelo: {model}")
 
+    # mime segun extension (flac tras compresion; original si no hay ffmpeg)
+    mime = {
+        ".flac": "audio/flac", ".mp3": "audio/mpeg", ".wav": "audio/wav",
+        ".m4a": "audio/mp4", ".ogg": "audio/ogg", ".opus": "audio/opus",
+        ".webm": "audio/webm",
+    }.get(audio_path.suffix.lower(), "application/octet-stream")
+
     with open(audio_path, "rb") as f:
         params = {
-            "file": (audio_path.name, f, "audio/wav"),
+            "file": (audio_path.name, f, mime),
             "model": model,
             "response_format": "verbose_json",
             "temperature": 0.0,
@@ -165,12 +179,17 @@ def transcribe(file_path: Path, language: Optional[str] = None) -> dict:
     suffix = file_path.suffix.lower()
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        if suffix in FFMPEG_NEEDED:
-            # Solo MKV/AVI/MOV necesitan conversion a WAV
-            audio_path = Path(tmp_dir) / "audio_converted.wav"
+        # Comprimimos SIEMPRE a Opus 16kHz mono. Groq rechaza archivos
+        # > 25 MB (free tier), y muchos formatos "nativos" (m4a, mp3 de
+        # alta calidad, etc.) pasan ese limite con audios largos. Opus
+        # 32k reduce el peso a ~0.2 MB/min sin perder calidad para voz.
+        if check_ffmpeg():
+            audio_path = Path(tmp_dir) / "audio_converted.ogg"
             extract_audio(file_path, audio_path)
         else:
-            # OGG, MP3, MP4, M4A, WAV, FLAC, WEBM → Groq los acepta directamente
+            # Sin ffmpeg no podemos comprimir: enviamos el original y
+            # que Groq decida (puede fallar con 413 si supera 25 MB).
+            logger.warning("ffmpeg no disponible: se envia el archivo original sin comprimir")
             audio_path = file_path
 
         duration = _get_duration(audio_path)
