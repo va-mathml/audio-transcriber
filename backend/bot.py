@@ -262,7 +262,8 @@ async def _get_file_url(file_id: str) -> str:
 
 async def send_message(chat_id: int, text: str, parse_mode: str = None) -> None:
     """Envia un mensaje de texto a un chat de Telegram."""
-    payload = {"chat_id": chat_id, "text": text}
+    # Sin tarjeta de vista previa para los enlaces (p. ej. el de LinkedIn en el encabezado)
+    payload = {"chat_id": chat_id, "text": text, "link_preview_options": {"is_disabled": True}}
     if parse_mode:
         payload["parse_mode"] = parse_mode
     async with httpx.AsyncClient(timeout=30.0) as client:
