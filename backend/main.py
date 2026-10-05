@@ -26,6 +26,8 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+# httpx logs every request URL at INFO; Telegram URLs embed the bot token
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # ─── App ────────────────────────────────────────────────────────────────────
 app = FastAPI(

@@ -4,7 +4,7 @@ Speech-to-text API with Telegram bot and web interface. Send any audio or video
 file and get the transcript back in seconds.
 
 **Live services**
-- Web: https://audio-transcriber-production-656f.up.railway.app
+- Web: https://audio-transcriber-93ff.onrender.com (free tier: first request after 15 min idle takes ~50 s)
 - Bot: [@vatranscriber_bot](https://t.me/vatranscriber_bot) on Telegram
 
 ---
@@ -25,7 +25,7 @@ Telegram user                    Web user (laptop)
 sends audio/video                drags & drops file
       |                                |
       v                                v
-Telegram API              Railway - static/index.html
+Telegram API              Render - static/index.html
 (webhook POST)            served by FastAPI (same origin)
       |                   drag & drop interface
       |                   calls /transcribe via fetch()
@@ -33,7 +33,7 @@ Telegram API              Railway - static/index.html
       +────────────────────────────────+
                      |
                      v
-         Railway - FastAPI backend
+         Render - FastAPI backend
          backend/main.py
          backend/bot.py
          backend/transcriber.py
@@ -49,7 +49,7 @@ Telegram API              Railway - static/index.html
 ```
 
 **One service, one deployment:**
-- Railway runs the bot, API, and web UI from a single FastAPI process
+- Render (free plan) runs the bot, API, and web UI from a single FastAPI process
 - The frontend is a static HTML file served at `GET /` — no separate hosting needed
 
 ---
@@ -74,7 +74,7 @@ Telegram API              Railway - static/index.html
 | Audio pipeline | ffmpeg (only for MKV/AVI/MOV) |
 | Bot | Telegram Bot API - webhook mode |
 | Frontend | Vanilla HTML/CSS/JS - drag and drop |
-| Deploy | Railway (bot + API + web UI in one service) |
+| Deploy | Render free tier via `render.yaml` Blueprint (bot + API + web UI in one service) |
 | Config | python-dotenv |
 
 ---
@@ -85,7 +85,7 @@ Telegram API              Railway - static/index.html
 - Dual-key Groq architecture with automatic fallback (turbo → large-v3)
 - Direct audio streaming to Groq API (no intermediate conversion for most formats)
 - Telegram Bot API integration - webhook mode (always-on, no polling)
-- Single-service deployment strategy (Railway serves bot, API, and UI from one process)
+- Single-service deployment strategy (Render serves bot, API, and UI from one process)
 - Security basics: input validation, file sanitization, path traversal prevention
 - Async Python with httpx for non-blocking file downloads
 - Environment-based configuration for dev/prod parity
@@ -104,11 +104,11 @@ audio-transcriber/
 │   ├── static/
 │   │   └── index.html     # Drag & drop UI - served by FastAPI at GET /
 │   ├── requirements.txt
-│   └── Procfile           # Railway entry point
+│   └── Procfile           # Start command (also defined in render.yaml)
 ├── frontend/
 │   └── index.html         # Source copy (reference only - not deployed)
 ├── scripts/
-│   └── set_webhook.py     # Register Railway URL as Telegram webhook
+│   └── set_webhook.py     # Manual webhook tools (--status / --delete)
 ├── .env.example           # All environment variables documented
 ├── .gitignore
 └── README.md
@@ -144,23 +144,21 @@ uvicorn main:app --reload --port 8000
 
 ## Deploy
 
-### Railway
+### Render (free tier)
 
 1. Push this repo to GitHub
-2. New project on railway.app - connect repo
-3. Set root directory: `backend`
-4. Add environment variables from `.env.example`
-5. Railway auto-detects `Procfile` and deploys
-6. The same URL serves both the web UI and the API
+2. In Render: New > Blueprint > connect the repo (uses `render.yaml`)
+3. Enter the secrets when prompted: `GROQ_API_KEY`, `GROQ_API_KEY_2`, `TELEGRAM_BOT_TOKEN`
+4. Deploy. Every push to `main` redeploys automatically
 
-### Register Telegram webhook
+### Telegram webhook
+
+The app registers `{RENDER_EXTERNAL_URL}/webhook` with Telegram on every startup,
+so no manual step is needed. To inspect or remove it locally:
 
 ```bash
-# Set WEBHOOK_URL in .env to your Railway URL, then:
-python scripts/set_webhook.py
-
-# Verify
 python scripts/set_webhook.py --status
+python scripts/set_webhook.py --delete
 ```
 
 ---
@@ -172,7 +170,7 @@ python scripts/set_webhook.py --status
 | `GROQ_API_KEY` | Yes | Primary key from console.groq.com |
 | `GROQ_API_KEY_2` | Recommended | Secondary key (fallback if primary hits quota) |
 | `TELEGRAM_BOT_TOKEN` | Yes | Token from @BotFather |
-| `WEBHOOK_URL` | Yes | Railway app URL (no trailing slash) |
+| `WEBHOOK_URL` | No | Overrides the public URL used for the webhook (Render sets `RENDER_EXTERNAL_URL` automatically) |
 | `GROQ_MODEL` | No | Default: `whisper-large-v3-turbo` (primary) |
 | `GROQ_MODEL_2` | No | Default: `whisper-large-v3` (fallback) |
 | `TRANSCRIPTION_LANGUAGE` | No | Default: `es` (leave empty for auto-detect) |
