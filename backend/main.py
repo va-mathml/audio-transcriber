@@ -52,6 +52,40 @@ app.add_middleware(
 # Este backend solo expone la API REST
 
 
+# ─── Registro automatico del webhook ────────────────────────────────────────
+@app.on_event("startup")
+async def register_webhook():
+    """
+    Registra {URL publica}/webhook en Telegram al arrancar.
+    Render expone RENDER_EXTERNAL_URL automaticamente; WEBHOOK_URL lo sobreescribe.
+    Asi no hace falta correr set_webhook.py ni tener el token en local.
+    """
+    import httpx
+
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    base  = (os.getenv("WEBHOOK_URL") or os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
+    if not token or not base.startswith("https://"):
+        logger.info("Webhook no registrado: falta TELEGRAM_BOT_TOKEN o URL publica https")
+        return
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"https://api.telegram.org/bot{token}/setWebhook",
+                json={
+                    "url":             f"{base}/webhook",
+                    "allowed_updates": ["message", "edited_message"],
+                },
+            )
+        data = response.json()
+        if data.get("ok"):
+            logger.info(f"Webhook registrado en {base}/webhook")
+        else:
+            logger.error(f"Telegram rechazo el webhook: {data.get('description', data)}")
+    except Exception as e:
+        logger.error(f"No se pudo registrar el webhook: {e}")
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # ENDPOINTS
 # ════════════════════════════════════════════════════════════════════════════
