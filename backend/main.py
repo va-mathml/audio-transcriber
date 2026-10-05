@@ -12,7 +12,7 @@ import logging
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Request
+from fastapi import FastAPI, File, UploadFile, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -135,16 +135,20 @@ async def transcribe_endpoint(file: UploadFile = File(...)):
 
 
 @app.post("/webhook")
-async def telegram_webhook(request: Request):
+async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
     """
     Recibe updates de Telegram via webhook (Modo 2).
     Telegram llama a este endpoint cuando el bot recibe un mensaje.
     La URL debe estar registrada con set_webhook.py
+
+    Responde 200 de inmediato y procesa el update en segundo plano:
+    si la transcripcion tarda (o el servicio viene de un cold start en Render),
+    Telegram no reintenta el mismo update y el audio no se transcribe dos veces.
     """
     try:
         update = await request.json()
         logger.info(f"Webhook recibido: update_id={update.get('update_id')}")
-        await handle_update(update)
+        background_tasks.add_task(handle_update, update)
         return {"ok": True}
 
     except Exception as e:
