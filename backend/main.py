@@ -3,7 +3,7 @@ main.py
 FastAPI - endpoints principales del transcriptor
   POST /transcribe  -> recibe archivo desde frontend web
   POST /webhook     -> recibe updates de Telegram
-  GET  /health      -> healthcheck para Railway/Render
+  GET  /health      -> healthcheck para Render
 Autor: Victor Aguilar - github.com/va-mathml
 """
 
@@ -101,7 +101,7 @@ async def root():
 @app.get("/health")
 async def health():
     """
-    Healthcheck para Railway y Render.
+    Healthcheck para Render.
     Retorna estado del servicio y keys disponibles.
     """
     return {
@@ -178,7 +178,7 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
     """
     Recibe updates de Telegram via webhook (Modo 2).
     Telegram llama a este endpoint cuando el bot recibe un mensaje.
-    La URL debe estar registrada con set_webhook.py
+    La URL se registra sola al arrancar (register_webhook).
 
     Responde 200 de inmediato y procesa el update en segundo plano:
     si la transcripcion tarda (o el servicio viene de un cold start en Render),
@@ -196,9 +196,5 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
         return {"ok": False, "error": str(e)}
 
 
-# ════════════════════════════════════════════════════════════════════════════
-# HELPERS
-# ════════════════════════════════════════════════════════════════════════════
-
-# Railway y Render arrancan via Procfile:
-# web: uvicorn main:app --host 0.0.0.0 --port $PORT
+# Render arranca con el startCommand de render.yaml:
+# uvicorn main:app --host 0.0.0.0 --port $PORT

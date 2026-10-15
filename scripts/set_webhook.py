@@ -1,7 +1,8 @@
 """
 set_webhook.py
-Registra la URL de Railway como webhook de Telegram.
-Ejecutar UNA SOLA VEZ despues de cada deploy en Railway.
+Herramienta manual para el webhook de Telegram. En Render no hace falta
+registrarlo: main.py lo registra solo al arrancar. Sirve para revisarlo
+(--status) o quitarlo (--delete) desde local.
 
 Uso:
     python set_webhook.py              # registra webhook
@@ -10,7 +11,7 @@ Uso:
 
 Requisitos en .env:
     TELEGRAM_BOT_TOKEN=...
-    WEBHOOK_URL=https://your-app.railway.app
+    WEBHOOK_URL=https://your-app.onrender.com
 """
 
 import os

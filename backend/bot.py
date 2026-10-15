@@ -1,7 +1,7 @@
 """
 bot.py
 Handler de Telegram para el transcriptor de audio/video.
-Modo: webhook (Modo 2) - Telegram llama a /webhook en Railway.
+Modo: webhook (Modo 2) - Telegram llama a /webhook en Render.
 Soporta: audio, video, notas de voz, documentos de audio/video.
 Autor: Victor Aguilar - github.com/va-mathml
 """

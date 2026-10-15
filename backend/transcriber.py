@@ -20,7 +20,7 @@ def _ffmpeg_bin() -> str:
 
     Prioriza el binario que empaqueta imageio-ffmpeg (funciona en cualquier
     contenedor sin depender de que el build system instale ffmpeg del sistema,
-    p.ej. Railpack ignora nixpacks.toml). Si no esta, usa el 'ffmpeg' del PATH.
+    p.ej. en Render). Si no esta, usa el 'ffmpeg' del PATH.
     """
     try:
         import imageio_ffmpeg

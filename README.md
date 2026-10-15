@@ -100,17 +100,15 @@ audio-transcriber/
 │   ├── main.py            # FastAPI app - GET / + /transcribe + /webhook + /health
 │   ├── transcriber.py     # Dual Groq keys: turbo (primary) + large-v3 (fallback)
 │   ├── bot.py             # Telegram handler - audio, video, voice notes
-│   ├── utils.py           # Validation, formatting, cleanup helpers
 │   ├── static/
 │   │   └── index.html     # Drag & drop UI - served by FastAPI at GET /
-│   ├── requirements.txt
-│   └── Procfile           # Start command (also defined in render.yaml)
-├── frontend/
-│   └── index.html         # Source copy (reference only - not deployed)
+│   └── requirements.txt
 ├── scripts/
 │   └── set_webhook.py     # Manual webhook tools (--status / --delete)
+├── render.yaml            # Render Blueprint (build, start command, env vars)
 ├── .env.example           # All environment variables documented
 ├── .gitignore
+├── JOURNAL.md             # Technical log: incidents, diagnosis, lessons
 └── README.md
 ```
 
