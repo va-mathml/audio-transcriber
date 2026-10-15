@@ -12,6 +12,7 @@ import tempfile
 from pathlib import Path
 
 import httpx
+from starlette.concurrency import run_in_threadpool
 
 from transcriber import transcribe, ALL_FORMATS
 
@@ -137,7 +138,8 @@ async def _download_and_transcribe(file_id: str, file_name: str) -> dict:
         logger.info(f"Descargado: {file_name} ({size_mb:.1f} MB)")
 
         # Transcribir
-        result = transcribe(tmp_path)
+        # Blocking call: keep the event loop free (see main.py)
+        result = await run_in_threadpool(transcribe, tmp_path)
         return result
 
     finally:

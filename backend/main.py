@@ -16,6 +16,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Request, Backgroun
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from transcriber import transcribe, ALL_FORMATS, MAX_FILE_MB, check_ffmpeg
 from bot import handle_update
@@ -144,7 +145,9 @@ async def transcribe_endpoint(file: UploadFile = File(...)):
     logger.info(f"/transcribe: {file.filename} ({size_mb:.1f} MB)")
 
     try:
-        result = transcribe(tmp_path)
+        # transcribe() is blocking (ffmpeg + Groq): run it off the event loop
+        # so /health and the webhook keep answering during long files
+        result = await run_in_threadpool(transcribe, tmp_path)
         return JSONResponse({
             "success":     True,
             "text":        result["text"],
