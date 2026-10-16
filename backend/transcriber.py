@@ -32,7 +32,8 @@ def _ffmpeg_bin() -> str:
 FFMPEG_BIN = _ffmpeg_bin()
 
 # ─── Formatos soportados ────────────────────────────────────────────────────
-AUDIO_FORMATS = {".mp3", ".wav", ".ogg", ".opus", ".m4a", ".flac", ".webm"}
+AUDIO_FORMATS = {".mp3", ".mpeg", ".mpga", ".wav", ".ogg", ".opus", ".m4a",
+                 ".aac", ".amr", ".flac", ".webm"}  # .mpeg: notas de voz de WhatsApp
 VIDEO_FORMATS = {".mp4", ".mkv", ".avi", ".mov", ".webm"}
 ALL_FORMATS   = AUDIO_FORMATS | VIDEO_FORMATS
 
@@ -147,7 +148,8 @@ def transcribe_with_groq(audio_path: Path, api_key: str, model: str, language: O
 
     # mime segun extension (flac tras compresion; original si no hay ffmpeg)
     mime = {
-        ".flac": "audio/flac", ".mp3": "audio/mpeg", ".wav": "audio/wav",
+        ".flac": "audio/flac", ".mp3": "audio/mpeg", ".mpeg": "audio/mpeg",
+        ".mpga": "audio/mpeg", ".wav": "audio/wav",
         ".m4a": "audio/mp4", ".ogg": "audio/ogg", ".opus": "audio/opus",
         ".webm": "audio/webm",
     }.get(audio_path.suffix.lower(), "application/octet-stream")
