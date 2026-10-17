@@ -208,6 +208,41 @@ endpoint trivial mientras otro trabaja.
 
 ---
 
+## Entrada 003 — 2026-10-16 — Notas de voz de WhatsApp en `.mpeg` rechazadas
+
+### 1. Síntoma
+
+Al subir `WhatsApp Audio 2026-10-16 at 3.44.29 PM.mpeg` (419 KB) la web respondió:
+
+> Error: Formato '.mpeg' no soportado. Formatos validos: .avi, .flac, .m4a, ...
+
+### 2. Causa raíz
+
+WhatsApp exporta algunas notas de voz con extensión `.mpeg` (contenido MPEG audio).
+La validación es una lista blanca de extensiones (`ALL_FORMATS` en `transcriber.py`)
+y `.mpeg` no estaba. El contenido nunca fue el problema: desde la entrada 002 todo
+archivo pasa por ffmpeg (AAC 16 kHz mono) antes de ir a Groq, y ffmpeg lo lee sin
+problema.
+
+### 3. Corrección
+
+- `AUDIO_FORMATS` ahora incluye `.mpeg`, `.mpga`, `.aac` y `.amr` (otros formatos
+  frecuentes en notas de voz). El MIME de respaldo (sin ffmpeg) mapea `.mpeg`/`.mpga`
+  a `audio/mpeg`.
+- `index.html`: atributo `accept` del selector y texto de formatos actualizados.
+- Verificación: un `.mpeg` sintético pasó `validate_file` y `extract_audio` en local;
+  Víctor confirmó en producción con el audio real. Commit `8f360d4`.
+
+### 4. Idea transferible (para curso)
+
+**La extensión es una etiqueta, no el formato.** Una lista blanca por extensión es
+simple y segura, pero rechaza archivos válidos cuyo nombre no conoce. Cuando el
+pipeline normaliza todo con ffmpeg, la lista blanca puede ser generosa en audio; la
+alternativa más robusta es validar por contenido (`ffprobe` o *magic bytes*) en vez
+de por nombre.
+
+---
+
 ## Ficha técnica del artefacto
 
 ### 1. ¿Qué tipo de artefacto es, en términos del mundo de la programación?

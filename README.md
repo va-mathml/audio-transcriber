@@ -44,8 +44,8 @@ Telegram API              Render - static/index.html
       - GROQ_API_KEY_2 → whisper-large-v3       (precise, fallback)
                      |
                      v
-      Native formats (no ffmpeg): OGG, MP3, MP4, M4A, WAV, FLAC, WEBM
-      ffmpeg only for: MKV, AVI, MOV
+      ffmpeg normalizes every upload to AAC 16 kHz mono (~0.23 MB/min)
+      before sending it to Groq (keeps long audio under the 25 MB limit)
 ```
 
 **One service, one deployment:**
@@ -58,10 +58,10 @@ Telegram API              Render - static/index.html
 
 | Category | Formats |
 |----------|---------|
-| Audio | MP3, WAV, OGG, OPUS, M4A, FLAC |
+| Audio | MP3, MPEG, MPGA, WAV, OGG, OPUS, M4A, AAC, AMR, FLAC |
 | Video | MP4, MKV, AVI, MOV, WebM |
 | Telegram native | Voice notes (.ogg), video notes |
-| WhatsApp forwarded | Voice messages (.ogg/.opus) |
+| WhatsApp forwarded | Voice messages (.ogg/.opus/.mpeg) |
 
 ---
 
@@ -71,7 +71,7 @@ Telegram API              Render - static/index.html
 |-------|-----------|
 | API | FastAPI + Uvicorn |
 | Transcription | Groq Whisper API (dual key, cloud-only) |
-| Audio pipeline | ffmpeg (only for MKV/AVI/MOV) |
+| Audio pipeline | ffmpeg via imageio-ffmpeg (all uploads compressed to AAC 16 kHz mono) |
 | Bot | Telegram Bot API - webhook mode |
 | Frontend | Vanilla HTML/CSS/JS - drag and drop |
 | Deploy | Render free tier via `render.yaml` Blueprint (bot + API + web UI in one service) |
@@ -83,7 +83,7 @@ Telegram API              Render - static/index.html
 
 - REST API design with FastAPI (file upload, async endpoints, static file serving)
 - Dual-key Groq architecture with automatic fallback (turbo → large-v3)
-- Direct audio streaming to Groq API (no intermediate conversion for most formats)
+- Audio normalization with ffmpeg so long recordings fit Groq's 25 MB limit
 - Telegram Bot API integration - webhook mode (always-on, no polling)
 - Single-service deployment strategy (Render serves bot, API, and UI from one process)
 - Security basics: input validation, file sanitization, path traversal prevention
